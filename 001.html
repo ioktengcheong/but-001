@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AMR Delivery BU Terminal</title>
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: #f3f4f6; padding: 16px; color: #1f2937; }
@@ -36,7 +41,7 @@
   <!-- Department Login View -->
   <div id="loginCard" class="card">
     <h2>🏢 部門登入 (BU Terminal Login)</h2>
-    <input type="password" id="pinInput" placeholder="請輸入 4 位數部門 PIN 碼 (例如: 1234)" maxlength="4">
+    <input type="password" id="pinInput" placeholder="請輸入 4 位數部門 PIN 碼 (例: RC Cafe 請輸入 1234)" maxlength="4">
     <button onclick="handleLogin()">登入系統</button>
   </div>
 
@@ -49,8 +54,8 @@
 
     <!-- Live Mission Status -->
     <div class="card" style="background: #f9fafb; border: 1px solid #e5e7eb;">
-      <h2>🚚 AMR 當前任務狀態</h2>
-      <div id="statusBadge" class="status-badge status-idle">無進行中任務</div>
+      <h2>🚚 AMR 當前任務狀態 (Real-time)</h2>
+      <div id="statusBadge" class="status-badge status-idle">等待任務中...</div>
       <div id="missionDetails" class="hidden">
         <p><strong>任務編號:</strong> <span id="missionIdVal">-</span></p>
         <p><strong>發貨地點:</strong> <span id="originVal">-</span></p>
@@ -63,47 +68,44 @@
 
     <!-- Quick Simulation Trigger for Testing -->
     <div class="card" style="background: #eff6ff; border: 1px solid #bfdbfe; margin-bottom: 0;">
-      <h2>🧪 測試推播觸發器 (Simulation)</h2>
-      <button onclick="simulateArrival()">🚀 模擬 AMR 抵達本部門 (觸發 Telegram 通知)</button>
+      <h2>🧪 本地測試推播觸發器 (Simulation)</h2>
+      <button onclick="simulateArrival()">🚀 模擬 AMR 抵達本部門 (測試語音及 Telegram)</button>
     </div>
   </div>
 
 </div>
 
 <script>
-// ==================== 1. 全局配置與 Telegram 設定 ====================
+// ==================== 1. 系統設定 ====================
 const TELEGRAM_BOT_TOKEN = "9157691891:AAEAKmuToYTM1xu6K4ZNn7KbW6X7AFXql4g";
 
 // 部門與 Telegram Group Chat ID 對應表
 const DEPT_TG_CONFIG = {
-  "RC Cafe": "-537615630" // 專屬 RC Cafe Telegram 群組 ID
-  // 今後新增部門只需加在此處，例如:
-  // "Staff Canteen": "-1002233445566",
-  // "Housekeeping": "-1009988776655"
+  "RC Cafe": "-537615630" // RC Cafe 專屬群組
 };
-
-// 預備個人 ID (若未匹配到部門群組時的備用 Target)
 const DEFAULT_PERSONAL_CHAT_ID = "9241144859";
 
-// PIN 碼與部門名稱對應表
+// PIN 碼與部門對應
 const PIN_MAP = {
   "1234": "RC Cafe",
   "2222": "Staff Canteen",
   "3333": "Housekeeping"
 };
 
+// Firebase 雲端資料庫設定
+const firebaseConfig = {
+  databaseURL: "https://amr-logistics-system-default-rtdb.asia-southeast1.firebasedatabase.app/"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 let currentDept = "";
 let isAudioEnabled = false;
 let audioContext = null;
+let dbListenerRef = null;
 
-// ==================== 2. Telegram 訊息推播邏輯 ====================
-/**
- * 發送 Telegram 到貨通知
- * @param {string} deptName - 目標部門
- * @param {string} textMessage - 推播文字內容
- */
+// ==================== 2. Telegram 推播函數 ====================
 function sendTelegramNotification(deptName, textMessage) {
-  // 自動依部門匹配 Group Chat ID
   const targetChatId = DEPT_TG_CONFIG[deptName] || DEFAULT_PERSONAL_CHAT_ID;
   const endpoint = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
@@ -119,7 +121,7 @@ function sendTelegramNotification(deptName, textMessage) {
   .then(res => res.json())
   .then(data => {
     if(data.ok) {
-      console.log(`[Telegram] 推播成功送達 [${deptName}] 群組 (${targetChatId})`);
+      console.log(`[Telegram] 推播成功送達 [${deptName}] (${targetChatId})`);
     } else {
       console.error("[Telegram] 發送失敗:", data);
     }
@@ -127,7 +129,7 @@ function sendTelegramNotification(deptName, textMessage) {
   .catch(err => console.error("[Telegram] 網絡異常:", err));
 }
 
-// ==================== 3. 語音與聲響警報邏輯 ====================
+// ==================== 3. 語音與聲響警報 ====================
 function enableAudio() {
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   isAudioEnabled = true;
@@ -141,7 +143,7 @@ function playBeepSound() {
   const osc = audioContext.createOscillator();
   const gain = audioContext.createGain();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(880, audioContext.currentTime); // A5 音高
+  osc.frequency.setValueAtTime(880, audioContext.currentTime);
   gain.gain.setValueAtTime(0.5, audioContext.currentTime);
   osc.connect(gain);
   gain.connect(audioContext.destination);
@@ -152,12 +154,12 @@ function playBeepSound() {
 function speakSpeech(text) {
   if (!('speechSynthesis' in window)) return;
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'zh-HK'; // 廣東話播報
+  utterance.lang = 'zh-HK';
   utterance.rate = 1.0;
   window.speechSynthesis.speak(utterance);
 }
 
-// ==================== 4. 系統操作邏輯 ====================
+// ==================== 4. 系統操作與 Firebase 即時監聽 ====================
 function handleLogin() {
   const pin = document.getElementById("pinInput").value;
   if (PIN_MAP[pin]) {
@@ -165,66 +167,99 @@ function handleLogin() {
     document.getElementById("deptTitle").innerText = "📍 部門: " + currentDept;
     document.getElementById("loginCard").classList.add("hidden");
     document.getElementById("dashboardCard").classList.remove("hidden");
-    checkMissionStatus();
+    
+    // 開始監聽該部門在 Firebase 上的即時任務狀態
+    listenToDepartmentStatus(currentDept);
   } else {
     alert("PIN 碼錯誤！請重新輸入。");
   }
 }
 
 function handleLogout() {
+  if (dbListenerRef) {
+    dbListenerRef.off(); // 停止監聽
+  }
   currentDept = "";
   document.getElementById("pinInput").value = "";
   document.getElementById("loginCard").classList.remove("hidden");
   document.getElementById("dashboardCard").classList.add("hidden");
 }
 
-function triggerArrivalAlert(missionId, origin) {
-  const nowStr = new Date().toLocaleTimeString();
-  
-  // 1. 更新 UI
+// 監聽 Firebase 數據變動（跨裝置核心）
+function listenToDepartmentStatus(deptName) {
+  dbListenerRef = db.ref('amr_missions/' + deptName);
+  dbListenerRef.on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    if (data.status === 'ARRIVED') {
+      showArrivalUI(data.missionId, data.origin, data.timeStr);
+    } else if (data.status === 'COMPLETED') {
+      showCompletedUI();
+    }
+  });
+}
+
+function showArrivalUI(missionId, origin, timeStr) {
   document.getElementById("statusBadge").className = "status-badge status-arrived";
   document.getElementById("statusBadge").innerText = "⚠️ AMR 已抵達，請盡速領貨！";
   document.getElementById("missionIdVal").innerText = missionId;
   document.getElementById("originVal").innerText = origin;
-  document.getElementById("arrivalTimeVal").innerText = nowStr;
+  document.getElementById("arrivalTimeVal").innerText = timeStr;
   document.getElementById("missionDetails").classList.remove("hidden");
 
-  // 2. 本地音效與廣播
   playBeepSound();
   speakSpeech(`請注意，自主移動機器人已抵達 ${currentDept}，請盡速前往領收物品。`);
-
-  // 3. 發送 Telegram 訊息至部門群組
-  const tgMessage = `🚨 <b>【AMR 到貨提醒】</b>\n\n` +
-                    `📍 <b>目標部門:</b> ${currentDept}\n` +
-                    `📦 <b>任務編號:</b> ${missionId}\n` +
-                    `🏬 <b>出貨來源:</b> ${origin}\n` +
-                    `⏰ <b>抵達時間:</b> ${nowStr}\n\n` +
-                    `請部門相關人員儘速前往完成取貨作業。`;
-  
-  sendTelegramNotification(currentDept, tgMessage);
 }
 
-function completeMission() {
+function showCompletedUI() {
   document.getElementById("statusBadge").className = "status-badge status-completed";
   document.getElementById("statusBadge").innerText = "✅ 任務已完成";
   document.getElementById("missionDetails").classList.add("hidden");
+}
 
-  // 發送完成收貨通知至 Telegram 群組
+// 現場點擊確認收貨 (會同步寫入 Firebase，並且由 BU app 發送 Telegram 告結)
+function completeMission() {
+  const nowStr = new Date().toLocaleTimeString();
+  
+  // 更新 Firebase 狀態為完成
+  db.ref('amr_missions/' + currentDept).set({
+    status: 'COMPLETED',
+    timeStr: nowStr
+  });
+
+  // 發送 Telegram 結束通知
   const tgMessage = `✅ <b>【AMR 取貨完成】</b>\n\n` +
                     `📍 <b>部門:</b> ${currentDept}\n` +
-                    `⏰ <b>完成時間:</b> ${new Date().toLocaleTimeString()}\n` +
+                    `⏰ <b>完成時間:</b> ${nowStr}\n` +
                     `AMR 已經被釋放並返回中央管制塔。`;
   
   sendTelegramNotification(currentDept, tgMessage);
 }
 
+// 模擬 AMR 抵達測試（會寫入 Firebase，同時觸發 Telegram）
 function simulateArrival() {
   const randomId = "MS-" + Math.floor(1000 + Math.random() * 9000);
-  triggerArrivalAlert(randomId, "Central Warehouse Zone A");
-}
+  const nowStr = new Date().toLocaleTimeString();
+  const origin = "Central Warehouse Zone A";
 
-function checkMissionStatus() {
-  // 可擴充由 LocalStorage 或 WebSocket 讀取即時狀態
+  // 1. 寫入 Firebase（這會同時讓所有開著這個部門畫面嘅平板同步收到！）
+  db.ref('amr_missions/' + currentDept).set({
+    status: 'ARRIVED',
+    missionId: randomId,
+    origin: origin,
+    timeStr: nowStr
+  });
+
+  // 2. 發送 Telegram 到貨通知
+  const tgMessage = `🚨 <b>【AMR 到貨提醒】</b>\n\n` +
+                    `📍 <b>目標部門:</b> ${currentDept}\n` +
+                    `📦 <b>任務編號:</b> ${randomId}\n` +
+                    `🏬 <b>出貨來源:</b> ${origin}\n` +
+                    `⏰ <b>抵達時間:</b> ${nowStr}\n\n` +
+                    `請部門相關人員儘速前往完成取貨作業。`;
+  
+  sendTelegramNotification(currentDept, tgMessage);
 }
 </script>
 
