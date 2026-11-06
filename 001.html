@@ -1,0 +1,176 @@
+<!DOCTYPE html>  
+<html lang="zh-Hant">  
+<head>  
+  <meta charset="UTF-8">  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+  <title>BU Delivery Notification Portal (PIN Locked)</title>  
+  <script src="https://cdn.tailwindcss.com"></script>  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">  
+  <style>  
+    .touch-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }  
+  </style>  
+</head>  
+<body class="bg-gray-100 min-h-screen text-gray-800 flex items-center justify-center p-4">  
+  
+  <div class="max-w-md w-full space-y-4">  
+  
+    <!-- 1. PIN 登入 / 鎖定介面 -->  
+    <div id="pinLockScreen" class="bg-white p-6 rounded-3xl shadow-xl border border-gray-200 text-center space-y-5">  
+      <div class="space-y-1">  
+        <div class="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto text-2xl mb-2">  
+          <i class="fa-solid fa-lock"></i>  
+        </div>  
+        <h2 class="text-xl font-black text-gray-900">BU Portal Security Lock</h2>  
+        <p class="text-xs text-gray-500">請選擇部門並輸入 4 位數 PIN 碼解鎖專屬介面</p>  
+      </div>  
+  
+      <div>  
+        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 text-left">選擇部門 (Department)</label>  
+        <select id="selectDepartment" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm font-bold rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none">  
+          <option value="RC Cafe">RC Cafe (預設 PIN: 1234)</option>  
+          <option value="Front Desk">Front Desk (預設 PIN: 2222)</option>  
+          <option value="Housekeeping">Housekeeping (預設 PIN: 3333)</option>  
+          <option value="3F Finance">3F Finance (預設 PIN: 4444)</option>  
+        </select>  
+      </div>  
+  
+      <div>  
+        <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 text-left">輸入 PIN Code</label>  
+        <input type="password" id="pinInput" maxlength="4" placeholder="••••"   
+               class="w-full text-center text-2xl font-mono tracking-widest bg-gray-50 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none">  
+      </div>  
+  
+      <button onclick="verifyPinAndUnlock()" class="touch-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 text-base">  
+        <i class="fa-solid fa-key"></i> 解鎖並進入專屬介面  
+      </button>  
+  
+      <div class="text-[11px] text-gray-400 border-t pt-3">  
+        🔒 數據保護：解鎖後僅能讀取解鎖部門之貨物派送紀錄  
+      </div>  
+    </div>  
+  
+    <!-- 2. BU 專屬通知主介面 -->  
+    <div id="buUnlockedPortal" class="hidden space-y-4">  
+      <div class="bg-emerald-700 text-white p-5 rounded-2xl shadow-md flex justify-between items-center">  
+        <div>  
+          <span class="text-[10px] bg-emerald-800 border border-emerald-500 text-emerald-200 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Authenticated</span>  
+          <h1 class="text-xl font-black mt-1" id="authenticatedBuLabel">RC Cafe</h1>  
+          <p class="text-xs text-emerald-100">現場領貨通知介面 (用家數據已完全隔離)</p>  
+        </div>  
+        <button onclick="lockPortal()" class="touch-btn bg-emerald-800 hover:bg-emerald-900 text-emerald-200 p-2.5 rounded-xl text-sm" title="重新鎖定">  
+          <i class="fa-solid fa-lock"></i>  
+        </button>  
+      </div>  
+  
+      <div id="buEmptyState" class="bg-white p-8 rounded-2xl border border-gray-200 text-center space-y-3 shadow-sm">  
+        <i class="fa-solid fa-boxes-packing text-4xl text-gray-300"></i>  
+        <div class="text-base font-bold text-gray-600">目前沒有送到 <span class="activeBuName text-emerald-600">RC Cafe</span> 的貨物</div>  
+        <p class="text-xs text-gray-400">當有 AMR 到達本部門時，畫面將自動亮起並彈出領貨通知。</p>  
+      </div>  
+  
+      <div id="buAlertCard" class="hidden bg-amber-50 border-2 border-amber-500 p-6 rounded-2xl shadow-xl space-y-4 animate-pulse">  
+        <div class="flex items-center justify-between border-b border-amber-200 pb-3">  
+          <span class="bg-amber-600 text-white font-bold text-xs px-3 py-1 rounded-full flex items-center gap-1">  
+            <i class="fa-solid fa-bell animate-bounce"></i> 貨物已送達 ARRIVED  
+          </span>  
+          <span class="text-xs font-mono font-bold text-amber-800" id="arrivalTime">--:--</span>  
+        </div>  
+  
+        <div class="space-y-1">  
+          <div class="text-2xl font-black text-gray-900" id="amrId">--</div>  
+          <div class="text-xs text-gray-600">貨物類別：<strong id="goodsType" class="text-emerald-700 text-sm">--</strong></div>  
+        </div>  
+  
+        <button onclick="confirmCollection()" class="touch-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white text-base font-black py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2">  
+          <i class="fa-solid fa-box-open"></i> 我已點收 / 確認領貨 (Goods Collected)  
+        </button>  
+      </div>  
+    </div>  
+  
+  </div>  
+  
+  <script>  
+    const BU_PIN_CODES = {  
+      "RC Cafe": "1234",  
+      "Front Desk": "2222",  
+      "Housekeeping": "3333",  
+      "3F Finance": "4444"  
+    };  
+  
+    let activeUnlockedBu = "";  
+  
+    window.onload = function() {  
+      const savedUnlocked = localStorage.getItem('unlocked_bu_role');  
+      if (savedUnlocked) {  
+        unlockForBu(savedUnlocked);  
+      }  
+  
+      window.addEventListener('storage', function(e) {  
+        if (e.key === 'amr_event_broadcast') {  
+          const eventData = JSON.parse(e.newValue);  
+          handleIncomingEvent(eventData);  
+        }  
+      });  
+    };  
+  
+    function verifyPinAndUnlock() {  
+      const selectedBu = document.getElementById('selectDepartment').value;  
+      const inputPin = document.getElementById('pinInput').value.trim();  
+  
+      if (BU_PIN_CODES[selectedBu] && inputPin === BU_PIN_CODES[selectedBu]) {  
+        localStorage.setItem('unlocked_bu_role', selectedBu);  
+        unlockForBu(selectedBu);  
+      } else {  
+        alert("❌ PIN 碼錯誤！請重新輸入。");  
+        document.getElementById('pinInput').value = "";  
+      }  
+    }  
+  
+    function unlockForBu(buRole) {  
+      activeUnlockedBu = buRole;  
+      document.getElementById('authenticatedBuLabel').innerText = buRole;  
+      document.querySelectorAll('.activeBuName').forEach(el => el.innerText = buRole);  
+  
+      document.getElementById('pinLockScreen').classList.add('hidden');  
+      document.getElementById('buUnlockedPortal').classList.remove('hidden');  
+  
+      const rawBroadcast = localStorage.getItem('amr_event_broadcast');  
+      if (rawBroadcast) {  
+        handleIncomingEvent(JSON.parse(rawBroadcast));  
+      }  
+    }  
+  
+    function lockPortal() {  
+      localStorage.removeItem('unlocked_bu_role');  
+      activeUnlockedBu = "";  
+      document.getElementById('pinInput').value = "";  
+      document.getElementById('buUnlockedPortal').classList.add('hidden');  
+      document.getElementById('pinLockScreen').classList.remove('hidden');  
+    }  
+  
+    function handleIncomingEvent(data) {  
+      if (activeUnlockedBu && data.targetBu === activeUnlockedBu && data.status === 'ARRIVED') {  
+        document.getElementById('buEmptyState').classList.add('hidden');  
+        document.getElementById('buAlertCard').classList.remove('hidden');  
+        document.getElementById('amrId').innerText = data.amr;  
+        document.getElementById('goodsType').innerText = data.goodsType;  
+        document.getElementById('arrivalTime').innerText = new Date(data.timestamp).toLocaleTimeString();  
+      }  
+    }  
+  
+    function confirmCollection() {  
+      const payload = {  
+        amr: document.getElementById('amrId').innerText,  
+        targetBu: activeUnlockedBu,  
+        status: "COLLECTED",  
+        timestamp: new Date().toISOString()  
+      };  
+      localStorage.setItem('amr_event_broadcast', JSON.stringify(payload));  
+        
+      document.getElementById('buAlertCard').classList.add('hidden');  
+      document.getElementById('buEmptyState').classList.remove('hidden');  
+      alert("✅ 點收成功！提醒停止，數據已回傳 Warehouse Control Tower。");  
+    }  
+  </script>  
+</body>  
+</html>  
