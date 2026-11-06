@@ -3,379 +3,230 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BU Delivery Notification Portal (Production Ready)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <title>AMR Delivery BU Terminal</title>
   <style>
-    .touch-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #f3f4f6; padding: 16px; color: #1f2937; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 16px; }
+    h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; color: #111827; }
+    input, select, button { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
+    button { background-color: #2563eb; color: white; border: none; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    button:hover { background-color: #1d4ed8; }
+    button.btn-success { background-color: #16a34a; }
+    button.btn-danger { background-color: #dc2626; }
+    .status-badge { display: inline-block; padding: 6px 12px; border-radius: 9999px; font-weight: 600; font-size: 0.875rem; text-align: center; width: 100%; margin-bottom: 12px; }
+    .status-arrived { background-color: #fef08a; color: #854d0e; }
+    .status-completed { background-color: #bbf7d0; color: #166534; }
+    .status-idle { background-color: #e5e7eb; color: #374151; }
+    .audio-banner { background-color: #fef3c7; border: 1px solid #f59e0b; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 16px; cursor: pointer; font-weight: bold; color: #b45309; }
+    .audio-banner.active { background-color: #dcfce7; border-color: #16a34a; color: #15803d; }
+    .hidden { display: none; }
   </style>
 </head>
-<body class="bg-gray-100 min-h-screen text-gray-800 flex items-center justify-center p-4">
+<body>
 
-  <div class="max-w-md w-full space-y-4">
+<div class="container">
 
-    <!-- 1. PIN 登入介面 (盲入模式) -->
-    <div id="pinLockScreen" class="bg-white p-6 rounded-3xl shadow-xl border border-gray-200 text-center space-y-6">
-      <div class="space-y-1">
-        <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto text-3xl mb-3">
-          <i class="fa-solid fa-shield-halved"></i>
-        </div>
-        <h2 class="text-2xl font-black text-gray-900">BU Secure Portal</h2>
-        <p class="text-xs text-gray-500 mt-1">請輸入專屬 4 位數授權碼解鎖領貨介面</p>
-      </div>
-
-      <div>
-        <input type="password" id="pinInput" maxlength="4" placeholder="••••" inputmode="numeric" pattern="[0-9]*"
-               class="w-full text-center text-3xl font-mono tracking-[1em] bg-gray-50 border-2 border-gray-200 rounded-xl p-4 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all">
-      </div>
-
-      <button onclick="verifyPinAndUnlock()" class="touch-btn w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 text-lg tracking-wide">
-        <i class="fa-solid fa-unlock-keyhole"></i> 驗證並解鎖
-      </button>
-
-      <!-- 動態管理 PIN 碼與 Telegram 設定按鈕 -->
-      <div class="pt-2">
-        <button onclick="toggleConfigModal()" class="text-xs text-emerald-600 hover:underline font-bold flex items-center justify-center gap-1 mx-auto">
-          <i class="fa-solid fa-gear"></i> 管理部門與 Telegram 設定
-        </button>
-      </div>
-
-      <div class="text-[11px] text-gray-400 border-t pt-4">
-        🔒 系統將根據您的授權碼自動匹配對應部門並隔離數據
-      </div>
-    </div>
-
-    <!-- 2. BU 專屬通知主介面 -->
-    <div id="buUnlockedPortal" class="hidden space-y-4">
-      <div class="bg-emerald-700 text-white p-5 rounded-2xl shadow-md flex justify-between items-center">
-        <div>
-          <span class="text-[10px] bg-emerald-800 border border-emerald-500 text-emerald-200 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Authenticated</span>
-          <h1 class="text-xl font-black mt-1" id="authenticatedBuLabel">--</h1>
-          <p class="text-xs text-emerald-100">現場領貨通知介面 (已啟用語音與 Telegram 推播)</p>
-        </div>
-        <button onclick="lockPortal()" class="touch-btn bg-emerald-800 hover:bg-emerald-900 text-emerald-200 p-2.5 rounded-xl text-sm transition" title="登出 / 重新鎖定">
-          <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
-      </div>
-
-      <!-- 聲音開關狀態條 -->
-      <div id="soundEnableBar" onclick="enableAudio()" class="bg-amber-100 border border-amber-300 text-amber-900 p-3.5 rounded-xl text-xs font-bold flex items-center justify-between cursor-pointer shadow-sm">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-volume-high text-amber-600 text-base"></i> 點擊此處啟用警報音效</span>
-        <span class="bg-amber-600 text-white px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider shadow-sm">Test Sound</span>
-      </div>
-
-      <div id="buEmptyState" class="bg-white p-8 rounded-2xl border border-gray-200 text-center space-y-3 shadow-sm">
-        <i class="fa-solid fa-boxes-packing text-5xl text-gray-200"></i>
-        <div class="text-base font-bold text-gray-600 mt-2">目前沒有送到 <span class="activeBuName text-emerald-600">--</span> 的貨物</div>
-        <p class="text-xs text-gray-400">當有 AMR 到達時，系統將自動循環播放聲音警報、廣播語音，並發送 Telegram 訊息。</p>
-      </div>
-
-      <div id="buAlertCard" class="hidden bg-amber-50 border-2 border-amber-500 p-6 rounded-2xl shadow-xl space-y-4 animate-pulse">
-        <div class="flex items-center justify-between border-b border-amber-200 pb-3">
-          <span class="bg-amber-600 text-white font-bold text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
-            <i class="fa-solid fa-volume-high animate-bounce"></i> 貨物已送達 (警報與 Telegram 已發送)
-          </span>
-          <span class="text-xs font-mono font-bold text-amber-800" id="arrivalTime">--:--</span>
-        </div>
-
-        <div class="space-y-1">
-          <div class="text-3xl font-black text-gray-900 tracking-tight" id="amrId">--</div>
-          <div class="text-sm text-gray-600 mt-1">貨物類別：<strong id="goodsType" class="text-emerald-700 text-base">--</strong></div>
-        </div>
-
-        <button onclick="confirmCollection()" class="touch-btn w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-lg font-black py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 mt-2">
-          <i class="fa-solid fa-box-open"></i> 我已點收 (停止警報)
-        </button>
-      </div>
-    </div>
-
-    <!-- 3. 動態管理 PIN 碼與 Telegram 設定 Modal -->
-    <div id="configModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div class="bg-white text-gray-800 w-full max-w-md p-6 rounded-3xl shadow-2xl space-y-4">
-        <div class="flex justify-between items-center border-b pb-3">
-          <h3 class="text-base font-black"><i class="fa-solid fa-sliders text-emerald-600"></i> 設定部門 PIN 碼與 Telegram</h3>
-          <button onclick="toggleConfigModal()" class="text-gray-400 hover:text-gray-600 font-bold text-lg">✖</button>
-        </div>
-
-        <!-- Telegram 設定區 -->
-        <div class="space-y-2 bg-blue-50 p-3.5 rounded-2xl border border-blue-100">
-          <div class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-            <i class="fa-brands fa-telegram text-blue-600 text-sm"></i> Telegram Bot 設定 (已自動內置)
-          </div>
-          <div>
-            <input type="text" id="tgBotToken" placeholder="Telegram Bot Token" class="w-full bg-white border p-2 rounded-xl text-xs mb-1.5 font-mono">
-            <input type="text" id="tgChatId" placeholder="Telegram Chat ID" class="w-full bg-white border p-2 rounded-xl text-xs font-mono">
-          </div>
-          <button onclick="saveTelegramConfig()" class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded-xl hover:bg-blue-700 transition">
-            儲存 Telegram Bot 配置
-          </button>
-        </div>
-
-        <!-- 部門對應區 -->
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">新增 / 修改部門 (PIN=部門名稱)</label>
-          <div class="flex gap-2">
-            <input type="text" id="newPin" placeholder="PIN (4位)" maxlength="4" class="w-1/3 bg-gray-50 border p-2.5 rounded-xl font-mono text-xs text-center">
-            <input type="text" id="newDept" placeholder="部門名稱" class="w-2/3 bg-gray-50 border p-2.5 rounded-xl text-xs">
-          </div>
-          <button onclick="addOrUpdatePinRule()" class="w-full bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-xl mt-2 hover:bg-emerald-700 transition">
-            儲存 / 新增配對規則
-          </button>
-        </div>
-
-        <div class="border-t pt-3">
-          <div class="text-xs font-bold text-gray-600 mb-2">當前對應表 (Current Mapping)：</div>
-          <div id="currentMappingList" class="bg-gray-50 p-3 rounded-xl space-y-1.5 max-h-36 overflow-y-auto text-xs font-mono">
-          </div>
-        </div>
-      </div>
-    </div>
-
+  <!-- Audio Enable Banner -->
+  <div id="audioBanner" class="audio-banner" onclick="enableAudio()">
+    🔔 點擊此處啟用警報音效與語音播報
   </div>
 
-  <script>
-    const DEFAULT_PIN_MAP = {
-      "1234": "RC Cafe",
-      "2222": "Front Desk",
-      "3333": "Housekeeping",
-      "4444": "3F Finance"
-    };
+  <!-- Department Login View -->
+  <div id="loginCard" class="card">
+    <h2>🏢 部門登入 (BU Terminal Login)</h2>
+    <input type="password" id="pinInput" placeholder="請輸入 4 位數部門 PIN 碼 (例如: 1234)" maxlength="4">
+    <button onclick="handleLogin()">登入系統</button>
+  </div>
 
-    // 預設直接寫入你剛剛取得的真實 Telegram Token 與 Chat ID
-    const DEFAULT_TG_CONFIG = {
-      botToken: "9157691891:AAEAKmuToYTM1xu6K4ZNn7KbW6X7AFXql4g",
-      chatId: "9241144859"
-    };
+  <!-- Main BU Dashboard -->
+  <div id="dashboardCard" class="card hidden">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h2 id="deptTitle">部門名稱</h2>
+      <button onclick="handleLogout()" style="width: auto; padding: 6px 12px; margin: 0;" class="btn-danger">登出</button>
+    </div>
 
-    let pinToBuMap = JSON.parse(localStorage.getItem('bu_pin_map')) || DEFAULT_PIN_MAP;
-    let tgConfig = JSON.parse(localStorage.getItem('bu_tg_config')) || DEFAULT_TG_CONFIG;
-    
-    let activeUnlockedBu = "";
-    let alarmInterval = null;
-    let audioCtx = null;
-
-    window.onload = function() {
-      const savedUnlocked = localStorage.getItem('unlocked_bu_role');
-      if (savedUnlocked) {
-        unlockForBu(savedUnlocked);
-      }
-
-      window.addEventListener('storage', function(e) {
-        if (e.key === 'amr_event_broadcast') {
-          const eventData = JSON.parse(e.newValue);
-          handleIncomingEvent(eventData);
-        }
-      });
-      
-      document.getElementById('pinInput').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-          verifyPinAndUnlock();
-        }
-      });
-
-      document.getElementById('tgBotToken').value = tgConfig.botToken || "";
-      document.getElementById('tgChatId').value = tgConfig.chatId || "";
-
-      renderMappingList();
-    };
-
-    function enableAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      playBeepSound();
-      speakText(`${activeUnlockedBu || '部門'} 音效設定成功`);
-      
-      const bar = document.getElementById('soundEnableBar');
-      bar.classList.remove('bg-amber-100', 'border-amber-300', 'text-amber-900');
-      bar.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-700');
-      bar.innerHTML = '<span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-500"></i> 音效與 Telegram 準備就緒</span>';
-    }
-
-    function playBeepSound() {
-      try {
-        const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.5, ctx.currentTime);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3);
-      } catch(e) {}
-    }
-
-    function speakText(text) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'zh-HK';
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
-      }
-    }
-
-    // 發送 Telegram 訊息
-    function sendTelegramNotification(amr, goodsType, targetBu) {
-      if (!tgConfig.botToken || !tgConfig.chatId) return;
-
-      const message = `🔔 *【AMR 貨物送達通知】*\n\n` +
-                      `📍 *目標部門*: ${targetBu}\n` +
-                      `🤖 *機器人編號*: ${amr}\n` +
-                      `📦 *貨物類別*: ${goodsType}\n` +
-                      `⏰ *到達時間*: ${new Date().toLocaleTimeString()}\n\n` +
-                      `⚠️ _請現場人員盡快前往點收！_`;
-
-      const url = `https://api.telegram.org/bot${tgConfig.botToken}/sendMessage`;
-
-      fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: tgConfig.chatId,
-          text: message,
-          parse_mode: "Markdown"
-        })
-      }).catch(err => console.error("Telegram error:", err));
-    }
-
-    function verifyPinAndUnlock() {
-      const inputPin = document.getElementById('pinInput').value.trim();
-      const matchedBu = pinToBuMap[inputPin];
-
-      if (matchedBu) {
-        localStorage.setItem('unlocked_bu_role', matchedBu);
-        unlockForBu(matchedBu);
-      } else {
-        alert("❌ 授權碼無效！請檢查 PIN 碼是否正確。");
-        document.getElementById('pinInput').value = "";
-      }
-    }
-
-    function unlockForBu(buRole) {
-      activeUnlockedBu = buRole;
-      document.getElementById('authenticatedBuLabel').innerText = buRole;
-      document.querySelectorAll('.activeBuName').forEach(el => el.innerText = buRole);
-
-      document.getElementById('pinLockScreen').classList.add('hidden');
-      document.getElementById('buUnlockedPortal').classList.remove('hidden');
-
-      const rawBroadcast = localStorage.getItem('amr_event_broadcast');
-      if (rawBroadcast) {
-        handleIncomingEvent(JSON.parse(rawBroadcast));
-      }
-    }
-
-    function lockPortal() {
-      stopAlarm();
-      localStorage.removeItem('unlocked_bu_role');
-      activeUnlockedBu = "";
-      document.getElementById('pinInput').value = "";
-      document.getElementById('buUnlockedPortal').classList.add('hidden');
-      document.getElementById('pinLockScreen').classList.remove('hidden');
-    }
-
-    function handleIncomingEvent(data) {
-      if (activeUnlockedBu && data.targetBu === activeUnlockedBu && data.status === 'ARRIVED') {
-        document.getElementById('buEmptyState').classList.add('hidden');
-        document.getElementById('buAlertCard').classList.remove('hidden');
-        document.getElementById('amrId').innerText = data.amr;
-        document.getElementById('goodsType').innerText = data.goodsType;
-        document.getElementById('arrivalTime').innerText = new Date(data.timestamp).toLocaleTimeString();
-
-        // 啟動警報 + 廣播 + Send Telegram
-        startAlarm(data.amr, data.goodsType);
-      }
-    }
-
-    function startAlarm(amr, goodsType) {
-      stopAlarm();
-      playBeepSound();
-      speakText(`請注意，機器人 ${amr} 已送達，貨品為 ${goodsType}，請盡快領貨。`);
-      
-      // 發送 Telegram 推播
-      sendTelegramNotification(amr, goodsType, activeUnlockedBu);
-
-      alarmInterval = setInterval(() => {
-        playBeepSound();
-        speakText(`請注意，機器人 ${amr} 等待領貨中。`);
-      }, 6000);
-    }
-
-    function stopAlarm() {
-      if (alarmInterval) {
-        clearInterval(alarmInterval);
-        alarmInterval = null;
-      }
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    }
-
-    function confirmCollection() {
-      stopAlarm();
-      const payload = {
-        amr: document.getElementById('amrId').innerText,
-        targetBu: activeUnlockedBu,
-        status: "COLLECTED",
-        timestamp: new Date().toISOString()
-      };
-      localStorage.setItem('amr_event_broadcast', JSON.stringify(payload));
-      
-      document.getElementById('buAlertCard').classList.add('hidden');
-      document.getElementById('buEmptyState').classList.remove('hidden');
-    }
-
-    function toggleConfigModal() {
-      document.getElementById('configModal').classList.toggle('hidden');
-    }
-
-    function saveTelegramConfig() {
-      const token = document.getElementById('tgBotToken').value.trim();
-      const chat = document.getElementById('tgChatId').value.trim();
-      tgConfig = { botToken: token, chatId: chat };
-      localStorage.setItem('bu_tg_config', JSON.stringify(tgConfig));
-      alert("✅ Telegram Bot 配置已儲存！");
-    }
-
-    function addOrUpdatePinRule() {
-      const pin = document.getElementById('newPin').value.trim();
-      const dept = document.getElementById('newDept').value.trim();
-
-      if (pin.length === 4 && dept) {
-        pinToBuMap[pin] = dept;
-        localStorage.setItem('bu_pin_map', JSON.stringify(pinToBuMap));
-        renderMappingList();
-        document.getElementById('newPin').value = '';
-        document.getElementById('newDept').value = '';
-        alert(`✅ 成功設定: PIN ${pin} ➔ ${dept}`);
-      } else {
-        alert("❌ 請輸入 4 位數 PIN 碼與部門名稱！");
-      }
-    }
-
-    function deletePinRule(pin) {
-      delete pinToBuMap[pin];
-      localStorage.setItem('bu_pin_map', JSON.stringify(pinToBuMap));
-      renderMappingList();
-    }
-
-    function renderMappingList() {
-      const list = document.getElementById('currentMappingList');
-      const keys = Object.keys(pinToBuMap);
-      if (keys.length === 0) {
-        list.innerHTML = `<div class="text-gray-400 text-center">尚無任何設定</div>`;
-        return;
-      }
-      list.innerHTML = keys.map(k => `
-        <div class="flex justify-between items-center bg-white p-2 rounded border">
-          <span>PIN <strong>${k}</strong> ➔ ${pinToBuMap[k]}</span>
-          <button onclick="deletePinRule('${k}')" class="text-red-500 hover:text-red-700 px-1.5 font-bold">✖</button>
+    <!-- Live Mission Status -->
+    <div class="card" style="background: #f9fafb; border: 1px solid #e5e7eb;">
+      <h2>🚚 AMR 當前任務狀態</h2>
+      <div id="statusBadge" class="status-badge status-idle">無進行中任務</div>
+      <div id="missionDetails" class="hidden">
+        <p><strong>任務編號:</strong> <span id="missionIdVal">-</span></p>
+        <p><strong>發貨地點:</strong> <span id="originVal">-</span></p>
+        <p><strong>抵達時間:</strong> <span id="arrivalTimeVal">-</span></p>
+        <div style="margin-top: 16px;">
+          <button class="btn-success" onclick="completeMission()">✅ 確認收貨並釋放 AMR</button>
         </div>
-      `).join('');
+      </div>
+    </div>
+
+    <!-- Quick Simulation Trigger for Testing -->
+    <div class="card" style="background: #eff6ff; border: 1px solid #bfdbfe; margin-bottom: 0;">
+      <h2>🧪 測試推播觸發器 (Simulation)</h2>
+      <button onclick="simulateArrival()">🚀 模擬 AMR 抵達本部門 (觸發 Telegram 通知)</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ==================== 1. 全局配置與 Telegram 設定 ====================
+const TELEGRAM_BOT_TOKEN = "9157691891:AAEAKmuToYTM1xu6K4ZNn7KbW6X7AFXql4g";
+
+// 部門與 Telegram Group Chat ID 對應表
+const DEPT_TG_CONFIG = {
+  "RC Cafe": "-537615630" // 專屬 RC Cafe Telegram 群組 ID
+  // 今後新增部門只需加在此處，例如:
+  // "Staff Canteen": "-1002233445566",
+  // "Housekeeping": "-1009988776655"
+};
+
+// 預備個人 ID (若未匹配到部門群組時的備用 Target)
+const DEFAULT_PERSONAL_CHAT_ID = "9241144859";
+
+// PIN 碼與部門名稱對應表
+const PIN_MAP = {
+  "1234": "RC Cafe",
+  "2222": "Staff Canteen",
+  "3333": "Housekeeping"
+};
+
+let currentDept = "";
+let isAudioEnabled = false;
+let audioContext = null;
+
+// ==================== 2. Telegram 訊息推播邏輯 ====================
+/**
+ * 發送 Telegram 到貨通知
+ * @param {string} deptName - 目標部門
+ * @param {string} textMessage - 推播文字內容
+ */
+function sendTelegramNotification(deptName, textMessage) {
+  // 自動依部門匹配 Group Chat ID
+  const targetChatId = DEPT_TG_CONFIG[deptName] || DEFAULT_PERSONAL_CHAT_ID;
+  const endpoint = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: targetChatId,
+      text: textMessage,
+      parse_mode: "HTML"
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if(data.ok) {
+      console.log(`[Telegram] 推播成功送達 [${deptName}] 群組 (${targetChatId})`);
+    } else {
+      console.error("[Telegram] 發送失敗:", data);
     }
-  </script>
+  })
+  .catch(err => console.error("[Telegram] 網絡異常:", err));
+}
+
+// ==================== 3. 語音與聲響警報邏輯 ====================
+function enableAudio() {
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  isAudioEnabled = true;
+  const banner = document.getElementById("audioBanner");
+  banner.classList.add("active");
+  banner.innerText = "🔊 警報音效與廣播已啟用";
+}
+
+function playBeepSound() {
+  if (!isAudioEnabled || !audioContext) return;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(880, audioContext.currentTime); // A5 音高
+  gain.gain.setValueAtTime(0.5, audioContext.currentTime);
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  osc.start();
+  osc.stop(audioContext.currentTime + 0.6);
+}
+
+function speakSpeech(text) {
+  if (!('speechSynthesis' in window)) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'zh-HK'; // 廣東話播報
+  utterance.rate = 1.0;
+  window.speechSynthesis.speak(utterance);
+}
+
+// ==================== 4. 系統操作邏輯 ====================
+function handleLogin() {
+  const pin = document.getElementById("pinInput").value;
+  if (PIN_MAP[pin]) {
+    currentDept = PIN_MAP[pin];
+    document.getElementById("deptTitle").innerText = "📍 部門: " + currentDept;
+    document.getElementById("loginCard").classList.add("hidden");
+    document.getElementById("dashboardCard").classList.remove("hidden");
+    checkMissionStatus();
+  } else {
+    alert("PIN 碼錯誤！請重新輸入。");
+  }
+}
+
+function handleLogout() {
+  currentDept = "";
+  document.getElementById("pinInput").value = "";
+  document.getElementById("loginCard").classList.remove("hidden");
+  document.getElementById("dashboardCard").classList.add("hidden");
+}
+
+function triggerArrivalAlert(missionId, origin) {
+  const nowStr = new Date().toLocaleTimeString();
+  
+  // 1. 更新 UI
+  document.getElementById("statusBadge").className = "status-badge status-arrived";
+  document.getElementById("statusBadge").innerText = "⚠️ AMR 已抵達，請盡速領貨！";
+  document.getElementById("missionIdVal").innerText = missionId;
+  document.getElementById("originVal").innerText = origin;
+  document.getElementById("arrivalTimeVal").innerText = nowStr;
+  document.getElementById("missionDetails").classList.remove("hidden");
+
+  // 2. 本地音效與廣播
+  playBeepSound();
+  speakSpeech(`請注意，自主移動機器人已抵達 ${currentDept}，請盡速前往領收物品。`);
+
+  // 3. 發送 Telegram 訊息至部門群組
+  const tgMessage = `🚨 <b>【AMR 到貨提醒】</b>\n\n` +
+                    `📍 <b>目標部門:</b> ${currentDept}\n` +
+                    `📦 <b>任務編號:</b> ${missionId}\n` +
+                    `🏬 <b>出貨來源:</b> ${origin}\n` +
+                    `⏰ <b>抵達時間:</b> ${nowStr}\n\n` +
+                    `請部門相關人員儘速前往完成取貨作業。`;
+  
+  sendTelegramNotification(currentDept, tgMessage);
+}
+
+function completeMission() {
+  document.getElementById("statusBadge").className = "status-badge status-completed";
+  document.getElementById("statusBadge").innerText = "✅ 任務已完成";
+  document.getElementById("missionDetails").classList.add("hidden");
+
+  // 發送完成收貨通知至 Telegram 群組
+  const tgMessage = `✅ <b>【AMR 取貨完成】</b>\n\n` +
+                    `📍 <b>部門:</b> ${currentDept}\n` +
+                    `⏰ <b>完成時間:</b> ${new Date().toLocaleTimeString()}\n` +
+                    `AMR 已經被釋放並返回中央管制塔。`;
+  
+  sendTelegramNotification(currentDept, tgMessage);
+}
+
+function simulateArrival() {
+  const randomId = "MS-" + Math.floor(1000 + Math.random() * 9000);
+  triggerArrivalAlert(randomId, "Central Warehouse Zone A");
+}
+
+function checkMissionStatus() {
+  // 可擴充由 LocalStorage 或 WebSocket 讀取即時狀態
+}
+</script>
+
 </body>
 </html>
