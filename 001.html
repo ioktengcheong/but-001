@@ -3,327 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BU Delivery Notification Portal (Dynamic PIN)</title>
+  <title>BU Delivery Notification Portal (PIN)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    .touch-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .touch-btn { touch-action: manipulation; }
   </style>
 </head>
-<body class="bg-gray-100 min-h-screen text-gray-800 flex items-center justify-center p-4">
+<body class="bg-gray-100 min-h-screen text-gray-800 flex flex-col items-center justify-start p-4">
 
-  <div class="max-w-md w-full space-y-4">
+  <div class="max-w-md w-full space-y-4 bg-white p-6 rounded-2xl shadow-md">
+    
+    <!-- 標題 -->
+    <div class="text-center pb-2 border-b">
+      <h1 class="text-xl font-bold text-blue-600"><i class="fas fa-box-open mr-2"></i>BU 配送與攞貨系統</h1>
+      <p class="text-xs text-gray-500 mt-1">請依照流程拍照後再點擊已攞貨</p>
+    </div>
 
-    <!-- 1. PIN 登入介面 (盲入模式：無需預先選部門，輸入 PIN 自動匹配) -->
-    <div id="pinLockScreen" class="bg-white p-6 rounded-3xl shadow-xl border border-gray-200 text-center space-y-6">
-      <div class="space-y-1">
-        <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto text-3xl mb-3">
-          <i class="fa-solid fa-shield-halved"></i>
-        </div>
-        <h2 class="text-2xl font-black text-gray-900">BU Secure Portal</h2>
-        <p class="text-xs text-gray-500 mt-1">請輸入專屬 4 位數授權碼解鎖領貨介面</p>
-      </div>
-
-      <div>
-        <input type="password" id="pinInput" maxlength="4" placeholder="••••" inputmode="numeric" pattern="[0-9]*"
-               class="w-full text-center text-3xl font-mono tracking-[1em] bg-gray-50 border-2 border-gray-200 rounded-xl p-4 focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all">
-      </div>
-
-      <button onclick="verifyPinAndUnlock()" class="touch-btn w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 text-lg tracking-wide">
-        <i class="fa-solid fa-unlock-keyhole"></i> 驗證並解鎖
+    <!-- 1. 影相 / 上傳照片區塊 -->
+    <div class="space-y-2">
+      <label class="block text-sm font-semibold text-gray-700">
+        <i class="fas fa-camera mr-1 text-blue-500"></i> 拍照存證 (必需)
+      </label>
+      
+      <!-- 隱藏的檔案上傳 input (支援手機直接拍照或選相簿) -->
+      <input type="file" id="photoInput" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoCapture(event)">
+      
+      <!-- 觸發拍照的按鈕 -->
+      <button type="button" onclick="document.getElementById('photoInput').click()" class="w-full py-3 px-4 bg-blue-50 text-blue-600 border border-blue-300 rounded-xl font-medium flex items-center justify-center space-x-2 touch-btn active:bg-blue-100">
+        <i class="fas fa-camera text-lg"></i>
+        <span id="photoBtnText">點擊拍攝 / 上傳貨品相片</span>
       </button>
 
-      <!-- 動態管理 PIN 碼彈窗按鈕 (現階段彈性配置) -->
-      <div class="pt-2">
-        <button onclick="toggleConfigModal()" class="text-xs text-emerald-600 hover:underline font-bold flex items-center justify-center gap-1 mx-auto">
-          <i class="fa-solid fa-gear"></i> 管理部門 PIN 碼設定 (現階段彈性配置)
-        </button>
-      </div>
-
-      <div class="text-[11px] text-gray-400 border-t pt-4">
-        🔒 系統將根據您的授權碼自動匹配對應部門並隔離數據
+      <!-- 照片預覽區 -->
+      <div id="previewContainer" class="hidden relative mt-2 text-center">
+        <img id="photoPreview" src="" alt="Preview" class="mx-auto max-h-48 rounded-lg border shadow-sm">
+        <span class="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow">
+          <i class="fas fa-check mr-1"></i> 已拍照
+        </span>
       </div>
     </div>
 
-    <!-- 2. BU 專屬通知主介面 -->
-    <div id="buUnlockedPortal" class="hidden space-y-4">
-      <div class="bg-emerald-700 text-white p-5 rounded-2xl shadow-md flex justify-between items-center">
-        <div>
-          <span class="text-[10px] bg-emerald-800 border border-emerald-500 text-emerald-200 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Authenticated</span>
-          <h1 class="text-xl font-black mt-1" id="authenticatedBuLabel">--</h1>
-          <p class="text-xs text-emerald-100">現場領貨通知介面 (已啟用聲音警報)</p>
-        </div>
-        <button onclick="lockPortal()" class="touch-btn bg-emerald-800 hover:bg-emerald-900 text-emerald-200 p-2.5 rounded-xl text-sm transition" title="登出 / 重新鎖定">
-          <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
-      </div>
-
-      <!-- 聲音開關狀態條 -->
-      <div id="soundEnableBar" onclick="enableAudio()" class="bg-amber-100 border border-amber-300 text-amber-900 p-3.5 rounded-xl text-xs font-bold flex items-center justify-between cursor-pointer shadow-sm">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-volume-high text-amber-600 text-base"></i> 點擊此處啟用警報音效</span>
-        <span class="bg-amber-600 text-white px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wider shadow-sm">Test Sound</span>
-      </div>
-
-      <div id="buEmptyState" class="bg-white p-8 rounded-2xl border border-gray-200 text-center space-y-3 shadow-sm">
-        <i class="fa-solid fa-boxes-packing text-5xl text-gray-200"></i>
-        <div class="text-base font-bold text-gray-600 mt-2">目前沒有送到 <span class="activeBuName text-emerald-600">--</span> 的貨物</div>
-        <p class="text-xs text-gray-400">當有 AMR 到達時，系統將自動循環播放聲音警報與廣播語音，直到完成點收。</p>
-      </div>
-
-      <div id="buAlertCard" class="hidden bg-amber-50 border-2 border-amber-500 p-6 rounded-2xl shadow-xl space-y-4 animate-pulse">
-        <div class="flex items-center justify-between border-b border-amber-200 pb-3">
-          <span class="bg-amber-600 text-white font-bold text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
-            <i class="fa-solid fa-volume-high animate-bounce"></i> 貨物已送達 (警報中)
-          </span>
-          <span class="text-xs font-mono font-bold text-amber-800" id="arrivalTime">--:--</span>
-        </div>
-
-        <div class="space-y-1">
-          <div class="text-3xl font-black text-gray-900 tracking-tight" id="amrId">--</div>
-          <div class="text-sm text-gray-600 mt-1">貨物類別：<strong id="goodsType" class="text-emerald-700 text-base">--</strong></div>
-        </div>
-
-        <button onclick="confirmCollection()" class="touch-btn w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-lg font-black py-4 rounded-xl shadow-lg transition flex justify-center items-center gap-2 mt-2">
-          <i class="fa-solid fa-box-open"></i> 我已點收 (停止警報)
-        </button>
-      </div>
-    </div>
-
-    <!-- 3. 動態管理 PIN 碼與部門 Modal -->
-    <div id="configModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div class="bg-white text-gray-800 w-full max-w-md p-6 rounded-3xl shadow-2xl space-y-4">
-        <div class="flex justify-between items-center border-b pb-3">
-          <h3 class="text-base font-black"><i class="fa-solid fa-sliders text-emerald-600"></i> 動態設定部門 PIN 碼</h3>
-          <button onclick="toggleConfigModal()" class="text-gray-400 hover:text-gray-600 font-bold text-lg">✖</button>
-        </div>
-        <p class="text-xs text-gray-500">現階段部門數量未定，您可以在此自由新增或修改 PIN 碼與部門名稱的對應關聯：</p>
-
-        <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">新增 / 修改對應 (格式: PIN=部門名稱)</label>
-          <div class="flex gap-2">
-            <input type="text" id="newPin" placeholder="例如: 8888" maxlength="4" class="w-1/3 bg-gray-50 border p-2.5 rounded-xl font-mono text-xs text-center">
-            <input type="text" id="newDept" placeholder="例如: Bar Desk" class="w-2/3 bg-gray-50 border p-2.5 rounded-xl text-xs">
-          </div>
-          <button onclick="addOrUpdatePinRule()" class="w-full bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-xl mt-2 hover:bg-emerald-700 transition">
-            儲存 / 新增配對規則
-          </button>
-        </div>
-
-        <div class="border-t pt-3">
-          <div class="text-xs font-bold text-gray-600 mb-2">當前對應表 (Current Mapping)：</div>
-          <div id="currentMappingList" class="bg-gray-50 p-3 rounded-xl space-y-1.5 max-h-36 overflow-y-auto text-xs font-mono">
-            <!-- 動態渲染現有 PIN 對應 -->
-          </div>
-        </div>
-      </div>
+    <!-- 2. 已攞貨提交按鈕 (預設鎖定 disabled) -->
+    <div class="pt-4">
+      <button type="button" id="btnComplete" onclick="submitDelivery()" disabled class="w-full py-3 px-4 bg-gray-300 text-gray-500 rounded-xl font-bold transition-all shadow-sm cursor-not-allowed touch-btn">
+        <i class="fas fa-check-circle mr-1"></i> 已攞貨 (請先拍照)
+      </button>
     </div>
 
   </div>
 
   <script>
-    // 預設對應表，同時支援 localstorage 動態擴充（適應現階段部門數量未定）
-    const DEFAULT_PIN_MAP = {
-      "1234": "RC Cafe",
-      "2222": "Front Desk",
-      "3333": "Housekeeping",
-      "4444": "3F Finance"
-    };
+    // 追蹤是否已拍照的狀態
+    let isPhotoTaken = false;
 
-    let pinToBuMap = JSON.parse(localStorage.getItem('bu_pin_map')) || DEFAULT_PIN_MAP;
-    let activeUnlockedBu = "";
-    let alarmInterval = null;
-    let audioCtx = null;
+    // 處理拍照/選相片後的動作
+    function handlePhotoCapture(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          // 顯示預覽圖片
+          const preview = document.getElementById('photoPreview');
+          preview.src = e.target.result;
+          document.getElementById('previewContainer').classList.remove('hidden');
+          document.getElementById('photoBtnText').innerText = '重新拍攝 / 更換相片';
 
-    window.onload = function() {
-      const savedUnlocked = localStorage.getItem('unlocked_bu_role');
-      if (savedUnlocked) {
-        unlockForBu(savedUnlocked);
-      }
+          // 解鎖狀態
+          isPhotoTaken = true;
 
-      window.addEventListener('storage', function(e) {
-        if (e.key === 'amr_event_broadcast') {
-          const eventData = JSON.parse(e.newValue);
-          handleIncomingEvent(eventData);
+          // 解鎖「已攞貨」按鈕樣式與功能
+          const btn = document.getElementById('btnComplete');
+          btn.disabled = false;
+          btn.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+          btn.classList.add('bg-green-600', 'text-white', 'hover:bg-green-700', 'shadow-md');
+          btn.innerHTML = '<i class="fas fa-check-circle mr-1"></i> 確認已攞貨';
         }
-      });
-      
-      document.getElementById('pinInput').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-          verifyPinAndUnlock();
-        }
-      });
-
-      renderMappingList();
-    };
-
-    function enableAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      playBeepSound();
-      speakText(`${activeUnlockedBu || '部門'} 音效設定成功`);
-      
-      const bar = document.getElementById('soundEnableBar');
-      bar.classList.remove('bg-amber-100', 'border-amber-300', 'text-amber-900');
-      bar.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-700');
-      bar.innerHTML = '<span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-500"></i> 音效已啟動，準備就緒</span>';
-    }
-
-    function playBeepSound() {
-      try {
-        const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.5, ctx.currentTime);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3);
-      } catch(e) {}
-    }
-
-    function speakText(text) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'zh-HK';
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
+        reader.readAsDataURL(file);
       }
     }
 
-    function verifyPinAndUnlock() {
-      const inputPin = document.getElementById('pinInput').value.trim();
-      const matchedBu = pinToBuMap[inputPin];
-
-      if (matchedBu) {
-        localStorage.setItem('unlocked_bu_role', matchedBu);
-        unlockForBu(matchedBu);
-      } else {
-        alert("❌ 授權碼無效！請檢查 PIN 碼是否正確。");
-        document.getElementById('pinInput').value = "";
-      }
-    }
-
-    function unlockForBu(buRole) {
-      activeUnlockedBu = buRole;
-      document.getElementById('authenticatedBuLabel').innerText = buRole;
-      document.querySelectorAll('.activeBuName').forEach(el => el.innerText = buRole);
-
-      document.getElementById('pinLockScreen').classList.add('hidden');
-      document.getElementById('buUnlockedPortal').classList.remove('hidden');
-
-      const rawBroadcast = localStorage.getItem('amr_event_broadcast');
-      if (rawBroadcast) {
-        handleIncomingEvent(JSON.parse(rawBroadcast));
-      }
-    }
-
-    function lockPortal() {
-      stopAlarm();
-      localStorage.removeItem('unlocked_bu_role');
-      activeUnlockedBu = "";
-      document.getElementById('pinInput').value = "";
-      document.getElementById('buUnlockedPortal').classList.add('hidden');
-      document.getElementById('pinLockScreen').classList.remove('hidden');
-    }
-
-    function handleIncomingEvent(data) {
-      if (activeUnlockedBu && data.targetBu === activeUnlockedBu && data.status === 'ARRIVED') {
-        document.getElementById('buEmptyState').classList.add('hidden');
-        document.getElementById('buAlertCard').classList.remove('hidden');
-        document.getElementById('amrId').innerText = data.amr;
-        document.getElementById('goodsType').innerText = data.goodsType;
-        document.getElementById('arrivalTime').innerText = new Date(data.timestamp).toLocaleTimeString();
-
-        startAlarm(data.amr, data.goodsType);
-      }
-    }
-
-    function startAlarm(amr, goodsType) {
-      stopAlarm();
-      playBeepSound();
-      speakText(`請注意，機器人 ${amr} 已送達，貨品為 ${goodsType}，請盡快領貨。`);
-
-      alarmInterval = setInterval(() => {
-        playBeepSound();
-        speakText(`請注意，機器人 ${amr} 等待領貨中。`);
-      }, 6000);
-    }
-
-    function stopAlarm() {
-      if (alarmInterval) {
-        clearInterval(alarmInterval);
-        alarmInterval = null;
-      }
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    }
-
-    function confirmCollection() {
-      stopAlarm();
-      const payload = {
-        amr: document.getElementById('amrId').innerText,
-        targetBu: activeUnlockedBu,
-        status: "COLLECTED",
-        timestamp: new Date().toISOString()
-      };
-      localStorage.setItem('amr_event_broadcast', JSON.stringify(payload));
-      
-      document.getElementById('buAlertCard').classList.add('hidden');
-      document.getElementById('buEmptyState').classList.remove('hidden');
-      
-      const bar = document.getElementById('soundEnableBar');
-      bar.innerHTML = '<span class="flex items-center gap-2"><i class="fa-solid fa-check text-emerald-500"></i> 點收成功！警報已解除</span>';
-      setTimeout(() => {
-          bar.innerHTML = '<span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-500"></i> 音效已啟動，準備就緒</span>';
-      }, 3000);
-    }
-
-    // --- 動態配置 PIN 碼管理區 ---
-    function toggleConfigModal() {
-      document.getElementById('configModal').classList.toggle('hidden');
-    }
-
-    function addOrUpdatePinRule() {
-      const pin = document.getElementById('newPin').value.trim();
-      const dept = document.getElementById('newDept').value.trim();
-
-      if (pin.length === 4 && dept) {
-        pinToBuMap[pin] = dept;
-        localStorage.setItem('bu_pin_map', JSON.stringify(pinToBuMap));
-        renderMappingList();
-        document.getElementById('newPin').value = '';
-        document.getElementById('newDept').value = '';
-        alert(`✅ 成功設定: PIN ${pin} ➔ ${dept}`);
-      } else {
-        alert("❌ 請輸入 4 位數 PIN 碼與部門名稱！");
-      }
-    }
-
-    function deletePinRule(pin) {
-      delete pinToBuMap[pin];
-      localStorage.setItem('bu_pin_map', JSON.stringify(pinToBuMap));
-      renderMappingList();
-    }
-
-    function renderMappingList() {
-      const list = document.getElementById('currentMappingList');
-      const keys = Object.keys(pinToBuMap);
-      if (keys.length === 0) {
-        list.innerHTML = `<div class="text-gray-400 text-center">尚無任何設定</div>`;
+    // 提交攞貨資料
+    function submitDelivery() {
+      // 雙重防護檢查
+      if (!isPhotoTaken) {
+        alert("⚠️ 請先拍照上傳，才可以點擊「已攞貨」！");
         return;
       }
-      list.innerHTML = keys.map(k => `
-        <div class="flex justify-between items-center bg-white p-2 rounded border">
-          <span>PIN <strong>${k}</strong> ➔ ${pinToBuMap[k]}</span>
-          <button onclick="deletePinRule('${k}')" class="text-red-500 hover:text-red-700 px-1.5 font-bold">✖</button>
-        </div>
-      `).join('');
+
+      // 這裡可以加入你原本提交到後台或記錄的邏輯
+      alert("✅ 攞貨成功紀錄已提交！");
+      
+      // 提交後的後續動作 (例如重新整理或清空)
+      // location.reload(); 
     }
   </script>
+
 </body>
 </html>
